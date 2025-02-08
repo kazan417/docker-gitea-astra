@@ -1,29 +1,36 @@
 # Build stage
-FROM docker.io/library/golang:1.23-alpine3.20 AS build-env
-
+FROM golang123 AS build-env
 ARG GOPROXY
+ARG GOPATH="/go"
 ENV GOPROXY=${GOPROXY:-direct}
-
 ARG GITEA_VERSION
 ARG TAGS="sqlite sqlite_unlock_notify"
 ENV TAGS="bindata timetzdata $TAGS"
 ARG CGO_EXTRA_CFLAGS
-
 # Build deps
-RUN apk --no-cache add \
-    build-base \
+
+RUN export PATH=$PATH:/usr/local/go/bin
+RUN DEBIAN_FRONTEND='noninteractive' \
+    apt update && apt install -y\
+    build-essential \
     git \
     nodejs \
     npm \
-    && rm -rf /var/cache/apk/*
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+ 
+#ADD https://go.dev/dl/go1.23.2.linux-amd64.tar.gz /usr/ 
+#RUN  tar -C /usr/ -xzf /usr/go1.23.2.linux-amd64.tar.gz
 
 # Setup repo
 COPY . ${GOPATH}/src/code.gitea.io/gitea
 WORKDIR ${GOPATH}/src/code.gitea.io/gitea
+RUN curl -qL https://www.npmjs.com/install.sh | sh
 
 # Checkout version if set
-RUN if [ -n "${GITEA_VERSION}" ]; then git checkout "${GITEA_VERSION}"; fi \
- && make clean-all build
+#RUN if [ -n "${GITEA_VERSION}" ]; then git checkout "${GITEA_VERSION}"; fi \
+RUN  make clean-all build
 
 # Begin env-to-ini build
 RUN go build contrib/environment-to-ini/environment-to-ini.go
@@ -41,46 +48,49 @@ RUN chmod 755 /tmp/local/usr/bin/entrypoint \
               /go/src/code.gitea.io/gitea/environment-to-ini
 RUN chmod 644 /go/src/code.gitea.io/gitea/contrib/autocompletion/bash_autocomplete
 
-FROM docker.io/library/alpine:3.20
+FROM s6-overlay:latest
+ARG UID=1380800045
+ARG GID=1380800044
 LABEL maintainer="maintainers@gitea.io"
-
+ENV S6_OVERLAY_VERSION=3.2.0.2
 EXPOSE 22 3000
-
-RUN apk --no-cache add \
+ENTRYPOINT ["/init"]
+RUN DEBIAN_FRONTEND='noninteractive' \
+    apt update && apt install -y\
     bash \
     ca-certificates \
     curl \
     gettext \
     git \
-    linux-pam \
-    openssh \
-    s6 \
+    libpam0g \
+    ssh \
     sqlite \
-    su-exec \
     gnupg \
-    && rm -rf /var/cache/apk/*
-
-RUN addgroup \
-    -S -g 1000 \
-    git && \
-  adduser \
-    -S -H -D \
-    -h /data/git \
-    -s /bin/bash \
-    -u 1000 \
-    -G git \
-    git && \
-  echo "git:*" | chpasswd -e
-
+    xz-utils \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+#ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp
+#RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz
+#RUN  rm -f /tmp/s6-overlay-noarch.tar.xz
+ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz /tmp
+RUN tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz 
+RUN  rm -f /tmp/s6-overlay-x86_64.tar.xz
+RUN mkdir /var/run/sshd
+RUN chmod 0755 /var/run/sshd
+COPY su-exec /bin/
+RUN addgroup --system --gid ${GID} git
+RUN  adduser  --home /data/git --shell /bin/bash --ingroup git --uid ${UID} git 
+RUN chown git:git /data
+RUN chmod -R a+r /package /command
 ENV USER=git
 ENV GITEA_CUSTOM=/data/gitea
-
 VOLUME ["/data"]
-
 ENTRYPOINT ["/usr/bin/entrypoint"]
-CMD ["/bin/s6-svscan", "/etc/s6"]
+#RUN  echo "git:${PASS}" | chpasswd -e
+#USER git
+CMD ["/command/s6-svscan", "/etc/s6"]
 
-COPY --from=build-env /tmp/local /
-COPY --from=build-env /go/src/code.gitea.io/gitea/gitea /app/gitea/gitea
-COPY --from=build-env /go/src/code.gitea.io/gitea/environment-to-ini /usr/local/bin/environment-to-ini
-COPY --from=build-env /go/src/code.gitea.io/gitea/contrib/autocompletion/bash_autocomplete /etc/profile.d/gitea_bash_autocomplete.sh
+COPY --chown=git --from=build-env /tmp/local /
+COPY --chown=git --from=build-env /go/src/code.gitea.io/gitea/gitea /app/gitea/gitea
+COPY --chown=git --from=build-env /go/src/code.gitea.io/gitea/environment-to-ini /usr/local/bin/environment-to-ini
+COPY --chown=git --from=build-env /go/src/code.gitea.io/gitea/contrib/autocompletion/bash_autocomplete /etc/profile.d/gitea_bash_autocomplete.sh
