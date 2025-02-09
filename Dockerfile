@@ -1,5 +1,5 @@
 # Build stage
-FROM ghcr.io/kazan417/docker-golang123-astra AS build-env
+FROM ghcr.io/kazan417/docker-golang123-astra:main AS build-env
 ARG GOPROXY
 ARG GOPATH="/go"
 ENV GOPROXY=${GOPROXY:-direct}
@@ -47,8 +47,7 @@ RUN chmod 755 /tmp/local/usr/bin/entrypoint \
               /go/src/code.gitea.io/gitea/gitea \
               /go/src/code.gitea.io/gitea/environment-to-ini
 RUN chmod 644 /go/src/code.gitea.io/gitea/contrib/autocompletion/bash_autocomplete
-
-FROM ghcr.io/kazan417/docker-s6-overlay-astra
+FROM ghcr.io/kazan417/docker-s6-overlay-astra:main
 ARG UID=1380800045
 ARG GID=1380800044
 LABEL maintainer="maintainers@gitea.io"
