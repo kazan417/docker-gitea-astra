@@ -1,5 +1,5 @@
 # Build stage
-FROM golang123 AS build-env
+FROM ghcr.io/kazan417/docker-golang123-astra AS build-env
 ARG GOPROXY
 ARG GOPATH="/go"
 ENV GOPROXY=${GOPROXY:-direct}
