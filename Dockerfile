@@ -48,7 +48,7 @@ RUN chmod 755 /tmp/local/usr/bin/entrypoint \
               /go/src/code.gitea.io/gitea/environment-to-ini
 RUN chmod 644 /go/src/code.gitea.io/gitea/contrib/autocompletion/bash_autocomplete
 
-FROM s6-overlay:latest
+FROM ghcr.io/kazan417/docker-s6-overlay-astra
 ARG UID=1380800045
 ARG GID=1380800044
 LABEL maintainer="maintainers@gitea.io"
